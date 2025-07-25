@@ -2,7 +2,9 @@ import pyzipper
 
 input_file = "/Users/vladstoyanov/scr/zipcracker/README.md"
 output_zip = "/Users/vladstoyanov/scr/zipcracker/README_protected.zip"
-password = b"Z1B2"  # Use bytes, not string
+password = b"99999999"  # Use bytes, not string
+
+len(password)
 
 with pyzipper.AESZipFile(output_zip,
                          'w',

@@ -12,6 +12,13 @@ try:
 except ImportError:
     tqdm = None
 
+# Fallback for interactive mode
+if '__file__' in globals():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+else:
+    script_dir = "/Users/vladstoyanov/scr/zipcracker" # os.getcwd()  # fallback: current working directory
+
+
 
 def brute_force(length, charset=None):
     # Generate all possible combinations of passwords of given length from charset.
@@ -31,6 +38,10 @@ def _try_password(args):
         return None
 
 def crack_zip(zipfilename, password_length, charset=None):
+    # Define root folder as the folder containing the script being executed
+    root_folder = os.path.dirname(os.path.abspath(__file__))
+    log_file = os.path.join(root_folder, 'attempted_passwords.log')
+    found_file = os.path.join(root_folder, 'found_password.txt')
     if not os.path.isfile(zipfilename):
         print(f"File not found: {zipfilename}")
         return
@@ -44,27 +55,41 @@ def crack_zip(zipfilename, password_length, charset=None):
             charset_to_use = charset if charset is not None else (string.ascii_letters + string.digits)
             total = len(charset_to_use) ** password_length
             passwords = brute_force(password_length, charset_to_use)
-            # Prepare arguments for multiprocessing
             args_iter = ((zipfilename, target_file, password) for password in passwords)
             found = None
+            attempted = 0
+            last_logged = 0
             with Pool(processes=cpu_count()) as pool:
                 if tqdm:
-                    for result in tqdm(pool.imap_unordered(_try_password, args_iter, chunksize=100), total=total, desc="Cracking", unit="pw"):
-                        if result:
-                            found = result
-                            break
+                    iterator = tqdm(pool.imap_unordered(_try_password, args_iter, chunksize=100), total=total, desc="Cracking", unit="pw")
                 else:
-                    for result in pool.imap_unordered(_try_password, args_iter, chunksize=100):
-                        if result:
-                            found = result
-                            break
+                    iterator = pool.imap_unordered(_try_password, args_iter, chunksize=100)
+                for result in iterator:
+                    attempted += 1
+                    # Log every 50,000 attempts
+                    if attempted % 50000 == 0:
+                        with open(log_file, 'a') as log:
+                            log.write(f"Attempted {attempted} passwords\n")
+                        last_logged = attempted
+                    if result:
+                        found = result
+                        break
                 pool.terminate()
+            # Log at the end if not already logged
+            if attempted != last_logged:
+                with open(log_file, 'a') as log:
+                    log.write(f"Attempted {attempted} passwords\n")
+            with open(log_file, 'a') as log:
+                log.write(f"Total attempted: {attempted}\n")
+                if found:
+                    log.write(f'Password found: {found}\n')
             if found:
                 print("===================================")
                 print(f'Password found: {found}')
                 print("==================================")
-                with open('attempted_passwords.log', 'a') as log:
-                    log.write(f'Password found: {found}\n')
+                # Write found password to a file
+                with open(found_file, 'w') as pwfile:
+                    pwfile.write(f'{found}\n')
             else:
                 print("Password not found.")
     except pyzipper.BadZipFile:
